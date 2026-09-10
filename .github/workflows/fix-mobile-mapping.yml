@@ -1,0 +1,33 @@
+name: Fix mobile mapping table
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.event.head_commit.message != 'fix: responsive replacement mapping'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make replacement mapping responsive
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          old = '<table class="w-full text-xs"><thead class="sticky top-0 bg-slate-100"><tr><th class="text-left p-3">Original</th><th class="text-left p-3">Replaced With</th><th></th></tr></thead><tbody>${list.map(m=>`<tr class="border-t"><td class="p-3 font-mono text-rose-600 break-all">${escapeHtml(m.original)}</td><td class="p-3 font-mono text-emerald-700 break-all">${escapeHtml(m.replacement)}</td><td class="p-3 text-right"><button onclick="navigator.clipboard?.writeText(\'${escapeJs(m.original+\' -> \'+m.replacement)}\')">📋</button></td></tr>`).join(\'\')}</tbody></table>'
+          new = '<table class="w-full table-fixed text-xs"><thead class="sticky top-0 bg-slate-100"><tr><th class="text-left p-2 sm:p-3 w-[44%] break-words">Original</th><th class="text-left p-2 sm:p-3 w-[44%] break-words">Replaced With</th><th class="w-[12%]"></th></tr></thead><tbody>${list.map(m=>`<tr class="border-t"><td class="p-2 sm:p-3 font-mono text-rose-600 break-words whitespace-normal align-top">${escapeHtml(m.original)}</td><td class="p-2 sm:p-3 font-mono text-emerald-700 break-words whitespace-normal align-top">${escapeHtml(m.replacement)}</td><td class="p-2 sm:p-3 text-right align-top"><button onclick="navigator.clipboard?.writeText(\'${escapeJs(m.original+\' -> \'+m.replacement)}\')">📋</button></td></tr>`).join(\'\')}</tbody></table>'
+          if old not in s:
+              raise SystemExit('target mapping table markup not found')
+          p.write_text(s.replace(old, new), encoding='utf-8')
+          PY
+          rm .github/workflows/fix-mobile-mapping.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html .github/workflows/fix-mobile-mapping.yml
+          git commit -m 'fix: responsive replacement mapping'
+          git push
