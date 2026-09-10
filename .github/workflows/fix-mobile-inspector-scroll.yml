@@ -1,0 +1,53 @@
+name: Fix mobile inspector scroll
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: "${{ github.event.head_commit.message != 'fix: mobile inspector horizontal scroll' }}"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add mobile horizontal scroll
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          style_old = '    textarea { tab-size:2; }'
+          style_new = '''    textarea { tab-size:2; }
+              .mobile-scroll { overflow-x:auto; overflow-y:auto; -webkit-overflow-scrolling:touch; scrollbar-width:thin; }
+              .mobile-scroll::-webkit-scrollbar { height:8px; width:8px; }'''
+          if style_old not in s:
+              raise SystemExit('style target not found')
+          s = s.replace(style_old, style_new, 1)
+          maps_old = '<div class="lg:col-span-7"><div class="flex justify-between items-center mb-3"><h2 class="font-black">Replacement Mapping <span class="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-1" id="mapCount">0</span></h2><div class="flex gap-2"><input id="search" oninput="drawMaps()" placeholder="Search..." class="w-36 sm:w-44 px-3 py-1.5 border rounded-lg text-xs"/><button onclick="copyMaps()" class="text-xs font-bold px-3 py-1.5 bg-white border rounded-lg">Copy All</button></div></div><div id="maps" class="bg-white rounded-xl border border-slate-200 overflow-auto max-h-72"></div></div>'
+          maps_new = '<div class="lg:col-span-7 min-w-0"><div class="flex justify-between items-center mb-3"><h2 class="font-black">Replacement Mapping <span class="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-1" id="mapCount">0</span></h2><div class="flex gap-2 shrink-0"><input id="search" oninput="drawMaps()" placeholder="Search..." class="w-36 sm:w-44 px-3 py-1.5 border rounded-lg text-xs"/><button onclick="copyMaps()" class="text-xs font-bold px-3 py-1.5 bg-white border rounded-lg">Copy All</button></div></div><div id="maps" class="mobile-scroll bg-white rounded-xl border border-slate-200 max-h-72"></div></div>'
+          if maps_old not in s:
+              raise SystemExit('mapping panel target not found')
+          s = s.replace(maps_old, maps_new, 1)
+          items_old = '<div class="lg:col-span-5"><div class="flex justify-between items-center mb-3"><h2 class="font-black">Detected Sensitive Items</h2><span class="text-xs text-slate-500">Local Inspector</span></div><div id="items" class="bg-white rounded-xl border border-slate-200 p-3 space-y-2"></div></div>'
+          items_new = '<div class="lg:col-span-5 min-w-0"><div class="flex justify-between items-center mb-3"><h2 class="font-black">Detected Sensitive Items</h2><span class="text-xs text-slate-500 shrink-0">Local Inspector</span></div><div class="mobile-scroll bg-white rounded-xl border border-slate-200 max-h-72"><div id="items" class="p-3 space-y-2 min-w-[520px]"></div></div></div>'
+          if items_old not in s:
+              raise SystemExit('sensitive items panel target not found')
+          s = s.replace(items_old, items_new, 1)
+          table_old = '<table class="w-full table-fixed text-xs">'
+          table_new = '<table class="w-full min-w-[520px] table-fixed text-xs">'
+          if table_old not in s:
+              raise SystemExit('mapping table target not found')
+          s = s.replace(table_old, table_new, 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Commit and remove workflow
+        run: |
+          rm .github/workflows/fix-mobile-inspector-scroll.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html .github/workflows/fix-mobile-inspector-scroll.yml
+          git commit -m 'fix: mobile inspector horizontal scroll'
+          git push
