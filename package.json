@@ -1,0 +1,9 @@
+{
+  "name": "gravity-safe-code-paste",
+  "version": "2.0.0",
+  "type": "module",
+  "description": "Gravity Safe Code Paste — Sanitize code, configuration and SQL before sharing.",
+  "scripts": {
+    "test": "node test_sanitizers.mjs"
+  }
+}
