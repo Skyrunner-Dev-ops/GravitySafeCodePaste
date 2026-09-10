@@ -1,0 +1,83 @@
+name: Gravity generic code config fix
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.event.head_commit.message == 'chore: prepare generic code config sanitizer fix'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replace sanitizer
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          start=s.index('function sanitize(source){')
+          end=s.index('\nfunction runSanitize(){',start)
+          new=r'''function sanitize(source){
+            let text=source||'', map=[], m;
+            const add=(o,r,c)=>{o=String(o||'');if(o&&o!==r&&!map.some(x=>x.original===o))map.push({original:o,replacement:r,category:c});};
+            const escRe=(v)=>String(v).replace(/[.*+?^${}()|[\\]\\]/g,'\\$&');
+            const sensitive=/(password|passwd|pwd|secret|apikey|api_key|accesskey|access_key|clientsecret|client_secret|token|privatekey|private_key|connectionstring|connection_string|sas_token|authorization)/i;
+            const hostKey=/(server|host|data[ ._-]*source|endpoint|base[ ._-]*url|service[ ._-]*url|uri|url)/i;
+            const placeholder=/^(true|false|null|undefined|sample|example|placeholder|your[-_ ]|safe[-_ ])/i;
+            const found={secret:null,connection:null,path:null,url:null,types:[]};
+            if(mode==='code'){
+              const tokenRules=[
+                [/\\bAKIA[0-9A-Z]{16}\\b/g,'your-aws-access-key','AWS Access Key'],
+                [/\\bASIA[0-9A-Z]{16}\\b/g,'your-aws-temporary-key','AWS Access Key'],
+                [/(?:sk_live_|sk_test_)[A-Za-z0-9_-]{12,}/g,'your-api-key','API / Secret Key'],
+                [/(?:ghp_|github_pat_)[A-Za-z0-9_-]{20,}/g,'your-github-token','API Token'],
+                [/eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+/g,'your-jwt-token','JWT Token']
+              ];
+              for(const [rx,repl,cat] of tokenRules)while((m=rx.exec(source))){found.secret=m[0];add(m[0],repl,cat);}
+
+              // Connection strings inside appsettings.json, JSON, XML, YAML, C#/Java/Node config and source code.
+              const quotedConn=/(?:["'`])([^"'`]*(?:(?:Server|Data Source|DataSource)\\s*=)[^"'`]*(?:(?:Database|Initial Catalog|InitialCatalog)\\s*=)[^"'`]*)(?:["'`])/gi;
+              while((m=quotedConn.exec(source))){const v=m[1];found.connection=v;add(v,'Server=your-server;Database=AppDB;User ID=app-user;Password=your-password;Connect Timeout=30;TrustServerCertificate=true;','Connection String');}
+              const connParts=/\\b(Server|Data Source|DataSource|Database|Initial Catalog|InitialCatalog|User ID|UID|User|Password|Pwd)\\s*=\\s*([^;\\r\\n,}]+)/gi;
+              while((m=connParts.exec(source))){const key=m[1].toLowerCase(),v=m[2].trim();let r=null;if(/^server$|data source|datasource/.test(key))r='your-server';else if(/database|initial catalog/.test(key))r='AppDB';else if(/user id|uid|user/.test(key))r='app-user';else if(/password|pwd/.test(key))r='your-password';if(r&&!placeholder.test(v))add(v,r,'Connection String');}
+
+              // Generic key/value detection for appsettings.json, .env, YAML-like config and language assignments.
+              const pair=/(["']?)([A-Za-z_][A-Za-z0-9_.-]*)\\1\\s*[:=]\\s*(["'])([^"'\\r\\n]+)\\3/g;
+              while((m=pair.exec(source))){const key=m[2],value=m[4].trim();if(!value||placeholder.test(value))continue;if(sensitive.test(key)){found.secret=value;add(value,/password|passwd|pwd/i.test(key)?'your-password':/connectionstring|connection_string/i.test(key)?'Server=your-server;Database=AppDB;User ID=app-user;Password=your-password;':'your-secret-value','Sensitive Configuration');}else if(hostKey.test(key)){const r=/^https?:\\/\\//i.test(value)?'https://api.example.com/v1':'your-server';add(value,r,'Configuration Host / URL');}}
+              const env=/^\\s*([A-Za-z_][A-Za-z0-9_.-]*)\\s*=\\s*([^#\\r\\n]+?)\\s*$/gm;
+              while((m=env.exec(source))){const key=m[1],value=m[2].trim().replace(/^["']|["']$/g,'');if(!value||placeholder.test(value))continue;if(sensitive.test(key))add(value,/password|passwd|pwd/i.test(key)?'your-password':'your-secret-value','Environment Secret');else if(hostKey.test(key))add(value,/^https?:\\/\\//i.test(value)?'https://api.example.com/v1':'your-server','Environment Host / URL');}
+
+              // URLs and paths anywhere in code/config.
+              const url=/https?:\\/\\/[^\\s"'<>`]+/gi;while((m=url.exec(source))){found.url=m[0];add(m[0],'https://api.example.com/v1','URL / Endpoint');}
+              const path=/(?:["'`])((?:[A-Za-z]:\\\\|\\\\\\\\|\\/)[^"'`\\r\\n]+)(?:["'`])/g;while((m=path.exec(source))){found.path=m[1];add(m[1],m[1].startsWith('C:')?'C:\\\\path\\\\to\\\\file.ext':'/path/to/data/file.ext','File Path');}
+
+              // Known mappings, then arbitrary declared project types.
+              Object.entries(codeNames).forEach(([a,b])=>{if(new RegExp('\\\\b'+escRe(a)+'\\\\b').test(source))add(a,b,'Project Identifier');});
+              const decl=/\\b(?:class|interface|record|struct|enum|type)\\s+([A-Z][A-Za-z0-9_]*)\\b/g;
+              while((m=decl.exec(source))){const n=m[1];found.types.push(n);if(!map.some(x=>x.original===n))add(n,/Dto$/i.test(n)?'SafePayloadDto':/Model$/i.test(n)?'SafeModel':/Service$/i.test(n)?'GenericService':/Repository$/i.test(n)?'GenericRepository':/Controller$/i.test(n)?'GenericController':'Safe'+n,'Declared Type');}
+              const named=/\\b([A-Z][A-Za-z0-9_]*(?:Dto|DTO|Model|ViewModel|Request|Response|Service|Repository|Controller|Entity|Manager|Context))\\b/g;
+              while((m=named.exec(source))){const n=m[1];if(!map.some(x=>x.original===n))add(n,/Dto$/i.test(n)?'SafePayloadDto':/Model$/i.test(n)?'SafeModel':/Service$/i.test(n)?'GenericService':/Repository$/i.test(n)?'GenericRepository':/Controller$/i.test(n)?'GenericController':/Entity$/i.test(n)?'SafeEntity':'Safe'+n,'Project Identifier');}
+            }else{
+              const uri=/\\b(?:postgres|postgresql|mysql|mariadb|mongodb(?:\\+srv)?):\\/\\/[^\\s]+/gi;while((m=uri.exec(source))){found.connection=m[0];add(m[0],'postgres://app_user:your-password@db.example.com/AppDB','Connection URI');}
+              Object.entries(sqlNames).forEach(([a,b])=>{if(new RegExp('\\\\b'+escRe(a)+'\\\\b').test(source))add(a,b,'SQL Identifier');});
+              const table=/\\b(?:FROM|JOIN|UPDATE|INTO|TABLE)\\s+(?:(?:\\[dbo\\]|dbo)\\.)?\\[?([A-Za-z_][A-Za-z0-9_]*)\\]?/gi;while((m=table.exec(source))){const n=m[1];if(!sqlNames[n])add(n,'Safe'+n,'SQL Identifier');}
+            }
+            map.sort((a,b)=>b.original.length-a.original.length);
+            for(const x of map)text=text.replace(new RegExp(escRe(x.original),'g'),x.replacement);
+            return {text,map};
+          }'''
+          p.write_text(s[:start]+new+s[end:],encoding='utf-8')
+          PY
+      - name: Commit and remove workflow
+        run: |
+          rm .github/workflows/gravity-generic-code-fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html .github/workflows/gravity-generic-code-fix.yml
+          git commit -m 'fix: support arbitrary code and configuration sanitization [skip ci]'
+          git push
