@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gravity — Safe Code Paste</title>
+  <meta name="description" content="Sanitize AI-generated code and SQL locally before sharing or pasting into your codebase." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter','ui-sans-serif','system-ui'] } } } };
+  </script>
+  <style>
+    html { scroll-behavior:smooth; }
+    body { margin:0; background:#f8fafc; color:#0f172a; }
+    textarea { tab-size:2; }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const CODE_EXAMPLE = `public class UserPaymentDto
+{
+    public string AwsSecretKey { get; set; }
+    public string FilePath { get; set; }
+}
+
+public class PaymentService
+{
+    private readonly string connectionString =
+        "Server=prod-db;Database=FinanceDB;User Id=sa;Password=SuperSecretPassword123!;";
+
+    public void ProcessPayment()
+    {
+        var path = "C:\\\\Users\\\\Developer\\\\Documents\\\\file.xlsx";
+        var apiKey = "AKIAIOSFODNN7EXAMPLE";
+        var clientSecret = "sk_live_51M0abcdef1234567890XYZ";
+        var internalApi = "https://internal-payments.corp.local/v1/charge";
+    }
+}`;
+const SQL_EXAMPLE = `SELECT
+    u.UserName,
+    u.EmailAddress,
+    p.Amount,
+    p.CardNumberHash
+FROM CustomerPayments p
+JOIN Users u ON u.Id = p.UserId
+WHERE p.DatabaseName = 'FinanceDB'
+  AND p.ServerHost = 'prod-db.internal.net';
+
+-- Audit Connection: postgres://admin:AdminPass99@db-master.corp:5432/FinanceDB`;
+
+const replacements = {
+  UserPaymentDto:'CustomerRecordDto', PaymentService:'BillingService',
+  AwsSecretKey:'CloudCredential', FilePath:'LocalFileReference',
+  CardNumberHash:'TokenizedIdentifier', EmailAddress:'ContactEmail',
+  UserName:'UserIdentifier', clientSecret:'clientCredential', internalApi:'publicEndpoint',
+  FinanceDB:'AppDB', CustomerPayments:'TransactionRecords',
+  'prod-db.internal.net':'db.example-server.net', 'prod-db':'your-server',
+  'db-master.corp':'db-cluster.example.org', Users:'ApplicationUsers'
+};
+
+function sanitize(source) {
+  let text = source || '';
+  const map = new Map();
+  const found = { aws:null, path:null, conn:null, secret:null, cls:[], url:null };
+  const add=(a,b,cat)=>{ if(a && a!==b && !map.has(a)) map.set(a,{original:a,replacement:b,category:cat}); };
+  let m;
+  const aws=/\bAKIA[0-9A-Z]{16}\b/g;
+  while((m=aws.exec(source))){ found.aws ??= m[0]; add(m[0],'your-api-key','Secret'); }
+  const secret=/\b(?:sk_live_|ghp_|xox[baprs]-)[A-Za-z0-9_-]{16,}\b/g;
+  while((m=secret.exec(source))){ found.secret ??= m[0]; add(m[0],'your-secret-token','Secret'); }
+  const conn=/"(Server=[^;]+;Database=[^;]+;[^\"]*)"/gi;
+  while((m=conn.exec(source))){
+    found.conn ??= m[1];
+    const server=m[1].match(/Server=([^;]+)/i), db=m[1].match(/Database=([^;]+)/i), pwd=m[1].match(/Password=([^;]+)/i);
+    if(server) add(server[1],'your-server','Server Host');
+    if(db) add(db[1],'AppDB','Database');
+    if(pwd) add(pwd[1],'your-password-here','Password');
+  }
+  const uri=/\b(postgres|mysql|mongodb(?:\+srv)?):\/\/([^:\s]+):([^@\s]+)@([^\/\s]+)\/([^\s]+)/gi;
+  while((m=uri.exec(source))){ found.conn ??= m[0]; add(m[2],'app_user','Username'); add(m[3],'app_password','Password'); add(m[4],'db-cluster.example.org','Host'); add(m[5],'AppDB','Database'); }
+  const paths=/(?:"|')((?:[A-Za-z]:\\\\|\/)(?:[^"'\r\n]+))(?:"|')/g;
+  while((m=paths.exec(source))){ if(!found.path) found.path=m[1]; add(m[1],m[1].startsWith('C:')?'C:\\\\path\\\\to\\\\file.xlsx':'/path/to/data/file.ext','File Path'); }
+  const urls=/(https?:\/\/[^\s"']+)/g;
+  while((m=urls.exec(source))){ if(/corp|local|internal|prod|staging|intranet/i.test(m[1])) { found.url ??= m[1]; add(m[1],'https://api.example.com/v1/charge','URL/Endpoint'); }}
+  Object.entries(replacements).forEach(([a,b])=>{ if(new RegExp('\\b'+a.replace(/[.*+?^${}()|[\\]\\]/g,'\\$&')+'\\b','g').test(source)){ add(a,b,'Project Identifier'); }});
+  const cls=/\b(?:class|interface|record|struct)\s+([A-Z][A-Za-z0-9_]+)\b/g;
+  while((m=cls.exec(source))){ found.cls.push(m[1]); if(!map.has(m[1])) add(m[1], /Dto$/i.test(m[1])?'SafePayloadDto':/Service$/i.test(m[1])?'GenericHandlerService':'Safe'+m[1],'Class / Type'); }
+  [...map.keys()].sort((a,b)=>b.length-a.length).forEach(k=>{
+    const esc=k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    text=text.replace(new RegExp(esc,'g'),map.get(k).replacement);
+  });
+  return {
+    text,
+    mappings:[...map.values()],
+    items:[
+      ['AWS Access Key',found.aws,'key'],['File Path',found.path,'folder'],['Connection String',found.conn,'database'],
+      ['API Key / Secret',found.secret,'key'],['Class / DTO Names',found.cls.length?[...new Set(found.cls)].slice(0,3).join(', '):null,'code'],['Potential URL / Endpoint',found.url,'globe']
+    ]
+  };
+}
+
+let mode='code', input=CODE_EXAMPLE, output='', maps=[], items=[];
+const icon = { key:'🔑',folder:'📁',database:'🗄️',code:'</>',globe:'🌐' };
+function render(){
+  document.getElementById('app').innerHTML = `
+  <div class="min-h-screen bg-slate-50">
+    <header class="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-slate-200">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <a href="#top" class="flex items-center gap-2">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-700 via-indigo-600 to-cyan-400 p-0.5 shadow"><div class="w-full h-full rounded-[10px] bg-slate-950 flex items-center justify-center"><span class="text-cyan-400 font-black text-xl italic">G</span></div></div>
+          <div><div class="font-extrabold text-xl leading-none">Gravity</div><div class="text-[10px] tracking-widest uppercase font-bold text-blue-600">Safe Code Paste</div></div>
+        </a>
+        <nav class="hidden md:flex gap-7 text-sm font-medium text-slate-600"><a href="#top" class="hover:text-blue-600">Home</a><a href="#sanitizer" class="text-blue-600 font-semibold">Sanitize</a><a href="#how" class="hover:text-blue-600">How It Works</a><a href="#privacy" class="hover:text-blue-600">Privacy</a></nav>
+        <a target="_blank" href="https://github.com/Skyrunner-Dev-ops/GravitySafeCodePaste" class="hidden sm:inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800">GitHub ↗</a>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="relative overflow-hidden py-10 sm:py-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-12 gap-8 items-center">
+          <div class="lg:col-span-7 text-center lg:text-left">
+            <div class="inline-flex px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-700">Paste • Sanitize • Share Confidently</div>
+            <h1 class="mt-5 text-4xl sm:text-6xl font-black tracking-tight">Gravity <span class="bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500 bg-clip-text text-transparent">Safe Code Paste</span></h1>
+            <p class="mt-5 max-w-2xl text-lg text-slate-700">Sanitize AI-generated code before it enters your codebase or public chat.</p>
+            <p class="mt-3 max-w-2xl text-sm sm:text-base text-slate-500">Remove credentials, connection strings, paths, URLs and project-specific identifiers while keeping the logic intact.</p>
+            <div class="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-xl mx-auto lg:mx-0">
+              ${[['🛡️','Protect Data'],['🔄','Replace Identifiers'],['📋','Mapping Dictionary'],['🗄️','Code + SQL']].map(x=>`<div class="bg-white border border-slate-200 rounded-xl p-3 shadow-sm"><div class="text-lg">${x[0]}</div><div class="mt-1 text-xs font-bold">${x[1]}</div></div>`).join('')}
+            </div>
+            <a href="#sanitizer" class="mt-7 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/20 hover:bg-blue-700">✨ Start Sanitizing</a>
+          </div>
+          <div class="lg:col-span-5">
+            <div class="rounded-3xl bg-gradient-to-br from-blue-100 via-white to-purple-100 border border-blue-200 p-5 shadow-xl">
+              <img src="assets/gravity-mascot.png" alt="Gravity mascot" class="w-full max-h-[380px] object-contain rounded-2xl" onerror="this.style.display='none';this.nextElementSibling.style.display='block'" />
+              <div style="display:none" class="h-72 rounded-2xl bg-white/70 border border-white flex items-center justify-center text-center p-8"><div><div class="text-6xl">✨</div><div class="mt-3 font-black text-2xl">AI helps.<br/>You stay safe.</div></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="sanitizer" class="pb-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden">
+            <div class="p-4 sm:p-5 border-b border-slate-200 bg-slate-50 flex flex-wrap gap-3 justify-between items-center">
+              <div class="flex bg-slate-200 p-1 rounded-xl"><button onclick="switchMode('code')" class="px-4 py-2 rounded-lg text-sm font-bold ${mode==='code'?'bg-blue-600 text-white':'text-slate-600'}">&lt;/&gt; Code</button><button onclick="switchMode('sql')" class="px-4 py-2 rounded-lg text-sm font-bold ${mode==='sql'?'bg-blue-600 text-white':'text-slate-600'}">🗄️ SQL</button></div>
+              <div class="flex gap-2"><button onclick="loadExample()" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold">Load Example</button><button onclick="clearAll()" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold">Clear</button></div>
+            </div>
+            <div class="p-4 sm:p-6 lg:p-8">
+              <div class="grid lg:grid-cols-12 gap-6 items-stretch">
+                <div class="lg:col-span-5 flex flex-col"><div class="flex justify-between mb-2"><span class="text-sm font-bold">Input ${mode==='code'?'Code':'SQL'}</span><span class="text-xs text-slate-500" id="inLines"></span></div><textarea id="input" class="flex-1 min-h-[320px] rounded-xl bg-slate-950 text-slate-100 border border-slate-800 p-4 font-mono text-sm leading-6 outline-none focus:ring-2 focus:ring-blue-500/30" spellcheck="false"></textarea></div>
+                <div class="lg:col-span-2 flex items-center justify-center"><button onclick="doSanitize()" class="w-full lg:w-auto rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 text-white font-black shadow-lg shadow-blue-500/20">✨ Sanitize →</button></div>
+                <div class="lg:col-span-5 flex flex-col"><div class="flex justify-between mb-2"><span class="text-sm font-bold">Sanitized ${mode==='code'?'Code':'SQL'}</span><button onclick="copyOut()" class="text-xs font-bold px-3 py-1 rounded-md bg-slate-100">Copy</button></div><textarea id="output" readonly class="flex-1 min-h-[320px] rounded-xl bg-slate-950 text-emerald-300 border border-slate-800 p-4 font-mono text-sm leading-6 outline-none" placeholder="Sanitized output will appear here..."></textarea></div>
+              </div>
+              <div class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><strong>Review notice:</strong> Gravity uses client-side heuristic rules; always review the output before sharing.</div>
+              <div class="mt-6 grid lg:grid-cols-12 gap-6">
+                <div class="lg:col-span-7"><div class="flex justify-between items-center mb-3"><h2 class="font-black">Replacement Mapping <span class="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-1" id="mapCount">0</span></h2><div class="flex gap-2"><input id="search" oninput="drawMaps()" placeholder="Search..." class="w-36 sm:w-44 px-3 py-1.5 border rounded-lg text-xs"/><button onclick="copyMaps()" class="text-xs font-bold px-3 py-1.5 bg-white border rounded-lg">Copy All</button></div></div><div id="maps" class="bg-white rounded-xl border border-slate-200 overflow-auto max-h-72"></div></div>
+                <div class="lg:col-span-5"><div class="flex justify-between items-center mb-3"><h2 class="font-black">Detected Sensitive Items</h2><span class="text-xs text-slate-500">Local Inspector</span></div><div id="items" class="bg-white rounded-xl border border-slate-200 p-3 space-y-2"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="how" class="bg-white border-y border-slate-200 py-14"><div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"><h2 class="text-3xl font-black text-center">How Gravity Works</h2><div class="mt-10 grid md:grid-cols-3 gap-6">${[['01','Paste','Paste code or SQL from your AI assistant.'],['02','Sanitize','Detect secrets, paths, endpoints and identifiers.'],['03','Review & Replace','Use the mapping dictionary to restore your local names.']].map(s=>`<div class="rounded-2xl bg-slate-50 border p-6"><div class="text-4xl font-black text-blue-600/20">${s[0]}</div><div class="mt-2 text-lg font-black">${s[1]}</div><p class="mt-2 text-sm text-slate-600">${s[2]}</p></div>`).join('')}</div><div class="mt-8 rounded-xl bg-blue-50 border border-blue-200 p-4 text-center text-sm font-semibold text-blue-900">Your code is processed in the browser for this static MVP.</div></div></section>
+      <section id="privacy" class="py-14"><div class="max-w-4xl mx-auto px-4 text-center"><div class="text-5xl">🛡️</div><h2 class="mt-3 text-3xl font-black">Your code should stay yours.</h2><p class="mt-4 text-slate-600">This static MVP does not need an application backend for sanitization. Review all output yourself before publishing, committing or sending sensitive material.</p></div></section>
+    </main>
+    <footer class="bg-slate-950 text-white py-10"><div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between gap-5"><div><div class="font-black text-xl">Gravity</div><div class="text-xs text-cyan-400 font-bold uppercase tracking-widest">Safe Code Paste</div></div><div class="text-sm text-slate-400">AI helps. You stay safe.</div><a class="text-sm text-slate-300 hover:text-white" target="_blank" href="https://github.com/Skyrunner-Dev-ops/GravitySafeCodePaste">View repository ↗</a></div></footer>
+  </div>`;
+  const ta=document.getElementById('input'); ta.value=input; ta.oninput=e=>{input=e.target.value; updateCounts();}; updateCounts(); drawMaps();
+}
+function updateCounts(){ const v=document.getElementById('input').value; document.getElementById('inLines').textContent=(v?v.split('\n').length:1)+' lines'; }
+function doSanitize(){ const r=sanitize(document.getElementById('input').value); output=r.text; maps=r.mappings; items=r.items; document.getElementById('output').value=output; drawMaps(); drawItems(); }
+function switchMode(m){ mode=m; input=m==='code'?CODE_EXAMPLE:SQL_EXAMPLE; output=''; maps=[]; items=[]; render(); doSanitize(); }
+function loadExample(){ input=mode==='code'?CODE_EXAMPLE:SQL_EXAMPLE; render(); doSanitize(); }
+function clearAll(){ input=''; output=''; maps=[]; items=[]; render(); }
+function copyOut(){ if(!document.getElementById('output').value)return; navigator.clipboard?.writeText(document.getElementById('output').value); }
+function copyMaps(){ navigator.clipboard?.writeText(maps.map(m=>`${m.original} -> ${m.replacement}`).join('\n')); }
+function drawMaps(){ const q=(document.getElementById('search')?.value||'').toLowerCase(); const list=maps.filter(m=>m.original.toLowerCase().includes(q)||m.replacement.toLowerCase().includes(q)); document.getElementById('mapCount').textContent=maps.length; document.getElementById('maps').innerHTML=list.length?`<table class="w-full text-xs"><thead class="sticky top-0 bg-slate-100"><tr><th class="text-left p-3">Original</th><th class="text-left p-3">Replaced With</th><th></th></tr></thead><tbody>${list.map(m=>`<tr class="border-t"><td class="p-3 font-mono text-rose-600 break-all">${escapeHtml(m.original)}</td><td class="p-3 font-mono text-emerald-700 break-all">${escapeHtml(m.replacement)}</td><td class="p-3 text-right"><button onclick="navigator.clipboard?.writeText('${escapeJs(m.original+' -> '+m.replacement)}')">📋</button></td></tr>`).join('')}</tbody></table>`:`<div class="p-8 text-center text-slate-400 text-xs">No replacements yet.</div>`; }
+function drawItems(){ document.getElementById('items').innerHTML=items.map(x=>`<div class="flex items-center justify-between gap-3 p-3 rounded-lg border bg-slate-50"><div class="min-w-0 flex items-start gap-2"><span>${icon[x[2]]||'•'}</span><div class="min-w-0"><div class="text-xs font-bold">${x[0]}</div><div class="text-[11px] text-slate-500 font-mono truncate">${escapeHtml(x[1]||'—')}</div></div></div><span class="text-[11px] font-bold px-2 py-1 rounded-full ${x[1]?'bg-emerald-100 text-emerald-800':'bg-slate-100 text-slate-400'}">${x[1]?'Replaced':'None'}</span></div>`).join(''); }
+function escapeHtml(s){return String(s).replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\\':'&#39;'}[c]));}
+function escapeJs(s){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n');}
+render(); doSanitize();
+</script>
+</body>
+</html>
