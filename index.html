@@ -60,34 +60,57 @@ function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;',
 function regexEscape(s){return String(s).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
 function addMapping(map,a,b,c){if(a&&a!==b&&!map.has(a))map.set(a,{original:a,replacement:b,category:c});}
 function sanitize(source){
-  let text=source||'',map=new Map(),found={aws:null,path:null,conn:null,secret:null,cls:[],url:null};let m;
+  let text=source;
+  const map=new Map();
+  const found={aws:null,path:null,conn:null,secret:null,cls:[],url:null};
+  const add=(a,b,c)=>{const v=String(a||'').trim();if(v&&v!==b&&!map.has(v))map.set(v,{original:v,replacement:b,category:c})};
+  const replSecret=(key)=>/(password|passwd|pwd)/i.test(key)?'your-password':/(connectionstring|connection_string|databaseurl)/i.test(key)?'Server=your-server;Database=AppDB;User ID=app-user;Password=your-password;':'your-secret-value';
+
   if(mode==='code'){
-    const aws=/\bAKIA[0-9A-Z]{16}\b/g;while((m=aws.exec(source))){found.aws??=m[0];addMapping(map,m[0],'your-api-key','Secret')}
-    const secret=/\b(?:sk_live_|ghp_|xox[baprs]-)[A-Za-z0-9_-]{16,}\b/g;while((m=secret.exec(source))){found.secret??=m[0];addMapping(map,m[0],'your-secret-token','Secret')}
-    const conn=/"(Server=[^;]+;Database=[^;]+;[^\"]*)"/gi;while((m=conn.exec(source))){found.conn??=m[1];const s=m[1].match(/Server=([^;]+)/i),d=m[1].match(/Database=([^;]+)/i),p=m[1].match(/Password=([^;]+)/i);if(s)addMapping(map,s[1],'your-server','Server Host');if(d)addMapping(map,d[1],'AppDB','Database');if(p)addMapping(map,p[1],'your-password-here','Password')}
-    const paths=/(?:"|')((?:[A-Za-z]:\\\\|\/)(?:[^"'\r\n]+))(?:"|')/g;while((m=paths.exec(source))){found.path??=m[1];addMapping(map,m[1],m[1].startsWith('C:')?'C:\\\\path\\\\to\\\\file.xlsx':'/path/to/data/file.ext','File Path')}
-    const urls=/(https?:\/\/[^\s"']+)/g;while((m=urls.exec(source)))if(/corp|local|internal|prod|staging|intranet/i.test(m[1])){found.url??=m[1];addMapping(map,m[1],'https://api.example.com/v1/endpoint','URL/Endpoint')}
-    Object.entries(codeReplacements).forEach(([a,b])=>{if(new RegExp('\\b'+regexEscape(a)+'\\b').test(source))addMapping(map,a,b,'Project Identifier')});
-    const cls=/\b(?:class|interface|record|struct)\s+([A-Z][A-Za-z0-9_]+)\b/g;while((m=cls.exec(source))){found.cls.push(m[1]);if(!map.has(m[1]))addMapping(map,m[1],/Dto$/i.test(m[1])?'SafePayloadDto':/Service$/i.test(m[1])?'GenericHandlerService':'Safe'+m[1],'Class / Type')}
+    // AWS / provider tokens.
+    const tokenRules=[
+      [/\bAKIA[0-9A-Z]{16}\b/g,'your-aws-access-key','AWS Access Key'],
+      [/\bASIA[0-9A-Z]{16}\b/g,'your-aws-temporary-key','AWS Access Key'],
+      [/\b(?:sk_live_|sk_test_)[A-Za-z0-9_-]{16,}\b/g,'your-api-key','API / Secret Key'],
+      [/\b(?:ghp_|github_pat_)[A-Za-z0-9_-]{20,}\b/g,'your-github-token','API / Secret Key'],
+      [/\b(?:xox[baprs]-)[A-Za-z0-9-]{16,}\b/g,'your-slack-token','API / Secret Key'],
+      [/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g,'your-jwt-token','JWT Token']
+    ];
+    let m;
+    for(const [re,r,label] of tokenRules)while((m=re.exec(source))){found.secret=m[0];add(m[0],r,label)}
+
+    // appsettings.json / web.config / code connection strings, including Data Source=SERVER,1983.
+    const conn=/["']([^"']*(?:Server|Data Source)\s*=\s*[^"']*(?:Database|Initial Catalog)\s*=\s*[^"']*(?:Password|Pwd)\s*=\s*[^"']*)["']/gi;
+    while((m=conn.exec(source))){found.conn=m[1];add(m[1],'Server=your-server;Database=AppDB;User ID=app-user;Password=your-password;Connect Timeout=30;TrustServerCertificate=true;','Connection String')}
+
+    // Generic sensitive config keys across JSON, YAML, .env-style code and assignments.
+    const sensitive=/(?:["']?)([A-Za-z0-9_.-]*(?:password|passwd|pwd|secret|secretkey|secret_key|apikey|api_key|accesskey|access_key|clientsecret|client_secret|token|auth_token|privatekey|private_key|connectionstring|connection_string|sas_token)[A-Za-z0-9_.-]*)(?:["']?)\s*[:=]\s*["']([^"'\r\n]+)["']/gi;
+    while((m=sensitive.exec(source))){add(m[2],replSecret(m[1]),'Sensitive Configuration')}
+
+    // Unquoted environment variables such as DB_PASSWORD=value or API_KEY=value.
+    const env=/^\s*([A-Za-z_][A-Za-z0-9_.-]*(?:PASSWORD|PASSWD|PWD|SECRET|API_KEY|APIKEY|TOKEN|PRIVATE_KEY|ACCESS_KEY|CLIENT_SECRET|CONNECTION_STRING)[A-Za-z0-9_.-]*)\s*=\s*([^#\r\n]+?)\s*$/gim;
+    while((m=env.exec(source))){add(m[2].replace(/^['"]|['"]$/g,''),replSecret(m[1]),'Environment Secret')}
+
+    // Host / URL / endpoint configuration values.
+    const hostConfig=/(?:["']?)([A-Za-z0-9_.-]*(?:server|host|datasource|data_source|baseurl|base_url|serviceurl|service_url|endpoint|url)[A-Za-z0-9_.-]*)(?:["']?)\s*[:=]\s*["']([^"'\r\n]+)["']/gi;
+    while((m=hostConfig.exec(source))){if(/^https?:\/\//i.test(m[2]))add(m[2],'https://api.example.com/v1','URL / Endpoint');else add(m[2],'your-server','Configuration Host')}
+
+    // URLs anywhere in code/config.
+    const url=/https?:\/\/[^\s"'<>`]+/gi;
+    while((m=url.exec(source))){found.url=m[0];add(m[0],'https://api.example.com/v1','URL / Endpoint')}
+
+    // Windows, UNC and Unix paths.
+    const path=/(?:["'])(?:[A-Za-z]:\\\\|\\\\\\\\|\/)(?:[^"'\r\n]+)(?:["'])/g;
+    while((m=path.exec(source))){const raw=m[0].slice(1,-1);found.path=raw;add(raw,raw.startsWith('C:')?'C:\\\\path\\\\to\\\\file.ext':'/path/to/data/file.ext','File Path')}
+
+    Object.entries(codeIdentifierMap).forEach(([a,b])=>{if(new RegExp('\\b'+regexEscape(a)+'\\b','g').test(source))add(a,b,'Project Identifier')});
+    const cls=/\b(?:class|interface|record|struct|enum)\s+([A-Z][A-Za-z0-9_]*)\b/g;
+    while((m=cls.exec(source))){found.cls.push(m[1]);if(!map.has(m[1]))add(m[1],/Dto$/i.test(m[1])?'SafePayloadDto':/Service$/i.test(m[1])?'GenericHandlerService':/Repository$/i.test(m[1])?'GenericRepository':/Controller$/i.test(m[1])?'GenericController':'Safe'+m[1],'Declared Type')}
   }else{
-    // Connection strings and obvious secrets first.
-    const uri=/\b(postgres|mysql|mongodb(?:\+srv)?):\/\/([^:\s]+):([^@\s]+)@([^\/\s]+)\/([^\s]+)/gi;
-    while((m=uri.exec(source))){found.conn??=m[0];addMapping(map,m[2],'app_user','Username');addMapping(map,m[3],'app_password','Password');addMapping(map,m[4],'db-cluster.example.org','Host');addMapping(map,m[5],'AppDB','Database')}
-    const secret=/\b(?:password|pwd|secret|token|apikey|api_key)\s*[=:]\s*['\"][^'\"]+['\"]/gi;while((m=secret.exec(source)))addMapping(map,m[0],m[0].split(/\s*[=:]\s*/)[0]+' = your-secret-here','Secret')
-    Object.entries(sqlReplacements).forEach(([a,b])=>{if(new RegExp('(^|[^A-Za-z0-9_])'+regexEscape(a)+'(?=$|[^A-Za-z0-9_])','i').test(source))addMapping(map,a,b,'SQL Identifier')});
-    // Detect SQL Server schema/table identifiers even when they are not in the built-in dictionary.
-    const qualified=/\b(?:dbo\.)?[A-Za-z_][A-Za-z0-9_]*\b/g;const candidates=new Set();while((m=qualified.exec(source))){const token=m[0],base=token.includes('.')?token.split('.').pop():token;if(!sqlKeywords.has(base.toUpperCase())&&!/^\d+$/.test(base)&&!['dbo','GETDATE'].includes(base.toUpperCase()))candidates.add(token)}
-    candidates.forEach(token=>{
-      const base=token.includes('.')?token.split('.').pop():token;
-      if(map.has(base)||map.has(token))return;
-      let replacement;
-      if(/Attendance/i.test(base))replacement=base.replace(/Attendance/ig,'AppAttendance');
-      else if(/Employee/i.test(base))replacement=base.replace(/Employee/ig,'Staff');
-      else if(/^User/i.test(base))replacement=base.replace(/^User/i,'Account');
-      else if(/Date|Time/i.test(base))replacement=base.replace(/Date/ig,'EventDate').replace(/Time/ig,'EventTime');
-      else replacement='App'+base;
-      addMapping(map,base,replacement,'SQL Identifier');
-    });
+    const uri=/\b(?:postgres|postgresql|mysql|mariadb|mongodb(?:\+srv)?):\/\/([^:\s]+):([^@\s]+)@([^\/\s]+)\/([^\s]+)/gi;let m;
+    while((m=uri.exec(source))){found.conn=m[0];add(m[0],'postgres://app_user:your-password@db.example.com/AppDB','Connection URI')}
+    Object.entries(sqlIdentifierMap).forEach(([a,b])=>{if(new RegExp('\\b'+regexEscape(a)+'\\b','g').test(source))add(a,b,'SQL Identifier')});
+    const host=/\b(?:[a-z0-9-]+\.)+(?:internal|local|corp|net|com|org)(?::\d+)?\b/gi;while((m=host.exec(source)))if(/internal|local|corp|prod/i.test(m[0]))add(m[0],'db.example.com','Host')
   }
   [...map.keys()].sort((a,b)=>b.length-a.length).forEach(k=>{text=text.replace(new RegExp(regexEscape(k),'g'),map.get(k).replacement)});
   return {text,mappings:[...map.values()],items:[['AWS Access Key',found.aws,'key'],['File Path',found.path,'folder'],['Connection String',found.conn,'database'],['API Key / Secret',found.secret,'key'],['Class / DTO Names',found.cls.length?[...new Set(found.cls)].join(', '):null,'code'],['Potential URL / Endpoint',found.url,'globe']]};
