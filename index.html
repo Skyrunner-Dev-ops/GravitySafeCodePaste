@@ -4,20 +4,24 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Gravity — Safe Code Paste</title>
-<meta name="description" content="Sanitize code and SQL locally before sharing.">
+<meta name="description" content="Sanitize code, configuration and SQL locally before sharing.">
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-html{scroll-behavior:smooth}body{margin:0;background:#f8fafc;color:#0f172a}
-textarea{tab-size:2}
-.xscroll{width:100%;max-width:100%;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
-.xscroll::-webkit-scrollbar{height:9px;width:8px}.xscroll::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:99px}.xscroll::-webkit-scrollbar-track{background:#e2e8f0;border-radius:99px}
-.mapping-table{width:max-content;min-width:680px;table-layout:auto}.mapping-table th,.mapping-table td{white-space:nowrap}.mapping-table th{position:sticky;top:0;z-index:2}
-.detected-list{width:max-content;min-width:560px}.detected-list .value{max-width:420px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-@media(max-width:640px){.mapping-table{min-width:680px}.detected-list{min-width:560px}.mobile-panel{max-width:calc(100vw - 32px)}}
+html{scroll-behavior:smooth}body{margin:0;background:#f8fafc;color:#0f172a}textarea{tab-size:2}
+.xscroll{width:100%;max-width:100%;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}.xscroll::-webkit-scrollbar{height:9px;width:8px}.xscroll::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:99px}.xscroll::-webkit-scrollbar-track{background:#e2e8f0;border-radius:99px}
+.mapping-table{width:max-content;min-width:760px}.mapping-table th,.mapping-table td{white-space:nowrap}.mapping-table th{position:sticky;top:0;z-index:2}.detected-list{width:max-content;min-width:620px}.detected-list .value{max-width:480px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}@media(max-width:640px){.mapping-table{min-width:760px}.detected-list{min-width:620px}}
 </style>
 </head>
 <body>
-<div id="app"></div>
+<header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200"><div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between"><a href="#top" class="flex items-center gap-2"><img src="assets/gravity-logo.png" alt="Gravity logo" class="w-10 h-10 rounded-xl object-cover"><div><b class="text-xl">Gravity</b><div class="text-[10px] tracking-widest uppercase font-bold text-blue-600">Safe Code Paste</div></div></a><nav class="hidden md:flex gap-6 text-sm font-medium text-slate-600"><a href="#sanitizer">Sanitize</a><a href="#how">How It Works</a><a href="#privacy">Privacy</a></nav><a target="_blank" href="https://github.com/Skyrunner-Dev-ops/GravitySafeCodePaste" class="hidden sm:block rounded-full bg-slate-900 px-4 py-2 text-xs font-bold text-white">GitHub ↗</a></div></header>
+<main id="top">
+<section class="py-10 sm:py-16"><div class="max-w-7xl mx-auto px-4 sm:px-6 grid lg:grid-cols-12 gap-8 items-center"><div class="lg:col-span-7"><span class="inline-flex px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-700">Paste • Sanitize • Share Confidently</span><h1 class="mt-5 text-4xl sm:text-6xl font-black tracking-tight">Gravity <span class="bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500 bg-clip-text text-transparent">Safe Code Paste</span></h1><p class="mt-5 text-lg text-slate-700">Sanitize AI-generated code and configuration before sharing it.</p><p class="mt-3 text-slate-500">Credentials, connection strings, paths, URLs and project-specific identifiers are replaced locally while the code structure is preserved.</p><a href="#sanitizer" class="mt-7 inline-flex rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white">✨ Start Sanitizing</a></div><div class="lg:col-span-5 rounded-3xl bg-gradient-to-br from-blue-100 via-white to-purple-100 border border-blue-200 p-5 shadow-xl"><img src="assets/gravity-logo.png" alt="Gravity Safe Code Paste" class="w-full max-h-[320px] object-contain rounded-2xl"></div></div></section>
+<section id="sanitizer" class="pb-12"><div class="max-w-7xl mx-auto px-4 sm:px-6"><div class="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden"><div class="p-4 border-b bg-slate-50 flex flex-wrap gap-3 justify-between items-center"><div class="flex bg-slate-200 p-1 rounded-xl"><button id="codeTab" onclick="switchMode('code')" class="px-4 py-2 rounded-lg text-sm font-bold bg-blue-600 text-white">&lt;/&gt; Code / Config</button><button id="sqlTab" onclick="switchMode('sql')" class="px-4 py-2 rounded-lg text-sm font-bold">🗄️ SQL</button></div><div class="flex gap-2"><button onclick="loadExample()" class="px-3 py-2 bg-white border rounded-lg text-xs font-bold">Load Example</button><button onclick="clearAll()" class="px-3 py-2 bg-white border rounded-lg text-xs font-bold">Clear</button></div></div><div class="p-4 sm:p-6"><div class="grid lg:grid-cols-12 gap-6 items-stretch"><div class="lg:col-span-5 flex flex-col"><div class="flex justify-between mb-2"><b class="text-sm">Input</b><span id="inStats" class="text-xs text-slate-500"></span></div><textarea id="input" class="w-full flex-1 min-h-[330px] rounded-xl bg-slate-950 text-slate-100 border border-slate-800 p-4 font-mono text-sm leading-6 outline-none focus:ring-2 focus:ring-blue-500" spellcheck="false"></textarea></div><div class="lg:col-span-2 flex items-center justify-center"><button onclick="runSanitize()" class="w-full sm:w-auto rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 font-extrabold shadow-lg">🛡️ Sanitize →</button></div><div class="lg:col-span-5 flex flex-col"><div class="flex justify-between mb-2"><b class="text-sm">Sanitized Output</b><button onclick="copyOutput()" class="text-xs font-bold text-blue-600">Copy</button></div><textarea id="output" readonly class="w-full flex-1 min-h-[330px] rounded-xl bg-slate-950 text-emerald-300 border border-slate-800 p-4 font-mono text-sm leading-6 outline-none" spellcheck="false"></textarea></div></div></div></div></div></section>
+<section class="pb-12"><div class="max-w-7xl mx-auto px-4 sm:px-6 grid lg:grid-cols-2 gap-6"><div class="bg-white rounded-2xl border shadow-sm overflow-hidden"><div class="p-5 border-b"><h2 class="font-extrabold text-lg">Replacement Mapping</h2><p class="text-sm text-slate-500 mt-1">Original values and their safe replacements.</p></div><div class="xscroll"><table class="mapping-table w-full text-sm"><thead><tr class="bg-slate-100 text-left"><th class="p-3">Original</th><th class="p-3">Replacement</th><th class="p-3">Category</th></tr></thead><tbody id="mappingBody"><tr><td colspan="3" class="p-5 text-slate-400">Run Sanitization to see mappings.</td></tr></tbody></table></div></div><div class="bg-white rounded-2xl border shadow-sm overflow-hidden"><div class="p-5 border-b"><h2 class="font-extrabold text-lg">Detected Sensitive Items</h2><p class="text-sm text-slate-500 mt-1">Items found in the current input.</p></div><div class="xscroll"><div id="detected" class="detected-list divide-y"></div></div></div></div></section>
+<section id="how" class="py-12 bg-white border-y"><div class="max-w-7xl mx-auto px-4 sm:px-6"><h2 class="text-2xl font-black">How It Works</h2><div class="grid sm:grid-cols-3 gap-5 mt-6"><div><b>1. Paste</b><p class="text-sm text-slate-500 mt-2">Paste code, appsettings, .env, YAML, JSON or SQL.</p></div><div><b>2. Detect</b><p class="text-sm text-slate-500 mt-2">Gravity finds common secrets, hosts, paths, URLs and identifiers.</p></div><div><b>3. Sanitize</b><p class="text-sm text-slate-500 mt-2">Values are replaced in your browser before you share the result.</p></div></div></div></section>
+<section id="privacy" class="py-12"><div class="max-w-7xl mx-auto px-4 sm:px-6"><div class="rounded-2xl bg-slate-900 text-white p-7"><h2 class="text-2xl font-black">Privacy first</h2><p class="mt-2 text-slate-300">Sanitization runs in the browser. Gravity does not need to upload your pasted code to perform these replacements.</p></div></div></section>
+</main>
+<footer class="py-8 text-center text-xs text-slate-500">Gravity Safe Code Paste • Sanitize before you share</footer>
 <script>
 const CODE_EXAMPLE=`public class UserPaymentDto
 {
@@ -38,6 +42,13 @@ public class PaymentService
         var internalApi = "https://internal-payments.corp.local/v1/charge";
     }
 }`;
+const CONFIG_EXAMPLE=`{
+  "ConnectionStrings": {
+    "DefaultConnection": "Data Source=MMINFRA,1983;Database=ProjectManagement;User ID=devteam;Password=devteam;Connect Timeout=30;MultipleActiveResultSets=true;TrustServerCertificate=true;"
+  },
+  "Jwt": { "SecretKey": "my-super-secret-jwt-key" },
+  "ApiSettings": { "ApiKey": "abc123-secret-value", "BaseUrl": "https://internal.example.local/api" }
+}`;
 const SQL_EXAMPLE=`ALTER TABLE dbo.AspNetUsers ADD AttendanceEmployeeId INT NOT NULL DEFAULT(0)
 
 CREATE TABLE EmployeeAttendance (
@@ -48,93 +59,59 @@ CREATE TABLE EmployeeAttendance (
     EndTime DATETIME NULL,
     SyncDateTime DATETIME NOT NULL DEFAULT GETDATE()
 )`;
-const codeReplacements={UserPaymentDto:'CustomerRecordDto',PaymentService:'BillingService',AwsSecretKey:'CloudCredential',FilePath:'LocalFileReference',FinanceDB:'AppDB',clientSecret:'clientCredential',internalApi:'publicEndpoint','prod-db':'your-server'};
-const sqlReplacements={
-  AspNetUsers:'ApplicationUsers',AttendanceEmployeeId:'EmployeeReferenceId',EmployeeAttendance:'AttendanceRecords',EmployeeAttendanceId:'AttendanceRecordId',UserId:'AccountId',LogDate:'EventDate',StartTime:'BeginTime',EndTime:'FinishTime',SyncDateTime:'SyncTimestamp',
-  UserName:'UserIdentifier',EmailAddress:'ContactEmail',CardNumberHash:'TokenizedIdentifier',CustomerPayments:'TransactionRecords',FinanceDB:'AppDB',Users:'ApplicationUsers','prod-db.internal.net':'db.example-server.net','db-master.corp':'db-cluster.example.org'
-};
-const sqlKeywords=new Set(('ALTER TABLE ADD CREATE DROP INSERT INTO UPDATE SET DELETE FROM JOIN INNER LEFT RIGHT FULL OUTER ON WHERE AND OR NOT NULL DEFAULT PRIMARY KEY FOREIGN REFERENCES CONSTRAINT UNIQUE INDEX IDENTITY SELECT AS VALUES CASE WHEN THEN ELSE END GROUP BY ORDER HAVING UNION ALL DISTINCT TOP OFFSET FETCH EXISTS IN IS LIKE BETWEEN ASC DESC GO DATABASE SCHEMA TABLE COLUMN INT BIGINT SMALLINT TINYINT DECIMAL NUMERIC FLOAT REAL MONEY BIT DATE DATETIME DATETIME2 TIME CHAR VARCHAR NVARCHAR NCHAR TEXT XML VARBINARY GETDATE COUNT SUM AVG MIN MAX CAST CONVERT COALESCE CURRENT_TIMESTAMP').split(/\s+/).map(x=>x.toUpperCase()));
-let mode='code',input=CODE_EXAMPLE,output='',maps=[],items=[];
-const icon={key:'🔑',folder:'📁',database:'🗄️',code:'</>',globe:'🌐'};
+let mode='code', input=CODE_EXAMPLE, output='';
+const codeNames={UserPaymentDto:'CustomerRecordDto',PaymentService:'BillingService',AwsSecretKey:'CloudCredential',FilePath:'LocalFileReference',connectionString:'safeConnectionString',FinanceDB:'AppDB',clientSecret:'clientCredential',internalApi:'publicEndpoint','prod-db':'your-server',MMINFRA:'your-server',ProjectManagement:'AppDB',devteam:'app-user'};
+const sqlNames={AspNetUsers:'ApplicationUsers',AttendanceEmployeeId:'EmployeeReferenceId',EmployeeAttendance:'AttendanceRecords',EmployeeAttendanceId:'AttendanceRecordId',UserId:'AccountId',LogDate:'EventDate',StartTime:'BeginTime',EndTime:'FinishTime',SyncDateTime:'SyncTimestamp'};
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function regexEscape(s){return String(s).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
-function addMapping(map,a,b,c){if(a&&a!==b&&!map.has(a))map.set(a,{original:a,replacement:b,category:c});}
+function reEsc(s){return String(s).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
+function add(map,a,b,c){a=String(a||'');if(a&&a!==b&&!map.some(x=>x.original===a))map.push({original:a,replacement:b,category:c});}
 function sanitize(source){
-  let text=source;
-  const map=new Map();
-  const found={aws:null,path:null,conn:null,secret:null,cls:[],url:null};
-  const add=(a,b,c)=>{const v=String(a||'').trim();if(v&&v!==b&&!map.has(v))map.set(v,{original:v,replacement:b,category:c})};
-  const replSecret=(key)=>/(password|passwd|pwd)/i.test(key)?'your-password':/(connectionstring|connection_string|databaseurl)/i.test(key)?'Server=your-server;Database=AppDB;User ID=app-user;Password=your-password;':'your-secret-value';
-
-  if(mode==='code'){
-    // AWS / provider tokens.
-    const tokenRules=[
-      [/\bAKIA[0-9A-Z]{16}\b/g,'your-aws-access-key','AWS Access Key'],
-      [/\bASIA[0-9A-Z]{16}\b/g,'your-aws-temporary-key','AWS Access Key'],
-      [/\b(?:sk_live_|sk_test_)[A-Za-z0-9_-]{16,}\b/g,'your-api-key','API / Secret Key'],
-      [/\b(?:ghp_|github_pat_)[A-Za-z0-9_-]{20,}\b/g,'your-github-token','API / Secret Key'],
-      [/\b(?:xox[baprs]-)[A-Za-z0-9-]{16,}\b/g,'your-slack-token','API / Secret Key'],
-      [/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g,'your-jwt-token','JWT Token']
-    ];
-    let m;
-    for(const [re,r,label] of tokenRules)while((m=re.exec(source))){found.secret=m[0];add(m[0],r,label)}
-
-    // appsettings.json / web.config / code connection strings, including Data Source=SERVER,1983.
-    const conn=/["']([^"']*(?:Server|Data Source)\s*=\s*[^"']*(?:Database|Initial Catalog)\s*=\s*[^"']*(?:Password|Pwd)\s*=\s*[^"']*)["']/gi;
-    while((m=conn.exec(source))){found.conn=m[1];add(m[1],'Server=your-server;Database=AppDB;User ID=app-user;Password=your-password;Connect Timeout=30;TrustServerCertificate=true;','Connection String')}
-
-    // Generic sensitive config keys across JSON, YAML, .env-style code and assignments.
-    const sensitive=/(?:["']?)([A-Za-z0-9_.-]*(?:password|passwd|pwd|secret|secretkey|secret_key|apikey|api_key|accesskey|access_key|clientsecret|client_secret|token|auth_token|privatekey|private_key|connectionstring|connection_string|sas_token)[A-Za-z0-9_.-]*)(?:["']?)\s*[:=]\s*["']([^"'\r\n]+)["']/gi;
-    while((m=sensitive.exec(source))){add(m[2],replSecret(m[1]),'Sensitive Configuration')}
-
-    // Unquoted environment variables such as DB_PASSWORD=value or API_KEY=value.
-    const env=/^\s*([A-Za-z_][A-Za-z0-9_.-]*(?:PASSWORD|PASSWD|PWD|SECRET|API_KEY|APIKEY|TOKEN|PRIVATE_KEY|ACCESS_KEY|CLIENT_SECRET|CONNECTION_STRING)[A-Za-z0-9_.-]*)\s*=\s*([^#\r\n]+?)\s*$/gim;
-    while((m=env.exec(source))){add(m[2].replace(/^['"]|['"]$/g,''),replSecret(m[1]),'Environment Secret')}
-
-    // Host / URL / endpoint configuration values.
-    const hostConfig=/(?:["']?)([A-Za-z0-9_.-]*(?:server|host|datasource|data_source|baseurl|base_url|serviceurl|service_url|endpoint|url)[A-Za-z0-9_.-]*)(?:["']?)\s*[:=]\s*["']([^"'\r\n]+)["']/gi;
-    while((m=hostConfig.exec(source))){if(/^https?:\/\//i.test(m[2]))add(m[2],'https://api.example.com/v1','URL / Endpoint');else add(m[2],'your-server','Configuration Host')}
-
-    // URLs anywhere in code/config.
-    const url=/https?:\/\/[^\s"'<>`]+/gi;
-    while((m=url.exec(source))){found.url=m[0];add(m[0],'https://api.example.com/v1','URL / Endpoint')}
-
-    // Windows, UNC and Unix paths.
-    const path=/(?:["'])(?:[A-Za-z]:\\\\|\\\\\\\\|\/)(?:[^"'\r\n]+)(?:["'])/g;
-    while((m=path.exec(source))){const raw=m[0].slice(1,-1);found.path=raw;add(raw,raw.startsWith('C:')?'C:\\\\path\\\\to\\\\file.ext':'/path/to/data/file.ext','File Path')}
-
-    Object.entries(codeIdentifierMap).forEach(([a,b])=>{if(new RegExp('\\b'+regexEscape(a)+'\\b','g').test(source))add(a,b,'Project Identifier')});
-    const cls=/\b(?:class|interface|record|struct|enum)\s+([A-Z][A-Za-z0-9_]*)\b/g;
-    while((m=cls.exec(source))){found.cls.push(m[1]);if(!map.has(m[1]))add(m[1],/Dto$/i.test(m[1])?'SafePayloadDto':/Service$/i.test(m[1])?'GenericHandlerService':/Repository$/i.test(m[1])?'GenericRepository':/Controller$/i.test(m[1])?'GenericController':'Safe'+m[1],'Declared Type')}
-  }else{
-    const uri=/\b(?:postgres|postgresql|mysql|mariadb|mongodb(?:\+srv)?):\/\/([^:\s]+):([^@\s]+)@([^\/\s]+)\/([^\s]+)/gi;let m;
-    while((m=uri.exec(source))){found.conn=m[0];add(m[0],'postgres://app_user:your-password@db.example.com/AppDB','Connection URI')}
-    Object.entries(sqlIdentifierMap).forEach(([a,b])=>{if(new RegExp('\\b'+regexEscape(a)+'\\b','g').test(source))add(a,b,'SQL Identifier')});
-    const host=/\b(?:[a-z0-9-]+\.)+(?:internal|local|corp|net|com|org)(?::\d+)?\b/gi;while((m=host.exec(source)))if(/internal|local|corp|prod/i.test(m[0]))add(m[0],'db.example.com','Host')
-  }
-  [...map.keys()].sort((a,b)=>b.length-a.length).forEach(k=>{text=text.replace(new RegExp(regexEscape(k),'g'),map.get(k).replacement)});
-  return {text,mappings:[...map.values()],items:[['AWS Access Key',found.aws,'key'],['File Path',found.path,'folder'],['Connection String',found.conn,'database'],['API Key / Secret',found.secret,'key'],['Class / DTO Names',found.cls.length?[...new Set(found.cls)].join(', '):null,'code'],['Potential URL / Endpoint',found.url,'globe']]};
+ let text=source, map=[];
+ if(mode==='code'){
+  let m;
+  const rules=[
+   [/\bAKIA[0-9A-Z]{16}\b/g,'your-aws-access-key','AWS Access Key'],
+   [/\bASIA[0-9A-Z]{16}\b/g,'your-aws-temporary-key','AWS Access Key'],
+   [/\b(?:sk_live_|sk_test_)[A-Za-z0-9_-]{12,}\b/g,'your-api-key','API / Secret Key'],
+   [/\b(?:ghp_|github_pat_)[A-Za-z0-9_-]{20,}\b/g,'your-github-token','API Token'],
+   [/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g,'your-jwt-token','JWT Token']
+  ];
+  rules.forEach(([r,v,c])=>{while((m=r.exec(source))){add(map,m[0],v,c);}});
+  const conn=/(?:["'`])([^"'`]*(?:Server|Data Source)\s*=\s*[^"'`]*(?:Database|Initial Catalog)\s*=\s*[^"'`]*(?:Password|Pwd)\s*=\s*[^"'`]*)["'`]/gi;
+  while((m=conn.exec(source)))add(map,m[1],'Server=your-server;Database=AppDB;User ID=app-user;Password=your-password;Connect Timeout=30;TrustServerCertificate=true;','Connection String');
+  const connAny=/\b(?:Server|Data Source)\s*=\s*[^;\r\n]+;[^\r\n]*(?:Password|Pwd)\s*=\s*[^;\r\n]+;?/gi;
+  while((m=connAny.exec(source)))add(map,m[0],'Server=your-server;Database=AppDB;User ID=app-user;Password=your-password;','Connection String');
+  const sensitive=/(?:["']?)([A-Za-z0-9_.-]*(?:password|passwd|pwd|secret|secretkey|secret_key|apikey|api_key|accesskey|access_key|clientsecret|client_secret|token|privatekey|private_key|connectionstring|connection_string)[A-Za-z0-9_.-]*)(?:["']?)\s*[:=]\s*["']([^"'\r\n]+)["']/gi;
+  while((m=sensitive.exec(source))){let k=m[1],v=/password|passwd|pwd/i.test(k)?'your-password':/connectionstring/i.test(k)?'Server=your-server;Database=AppDB;User ID=app-user;Password=your-password;':'your-secret-value';add(map,m[2],v,'Sensitive Configuration');}
+  const env=/^\s*([A-Za-z_][A-Za-z0-9_.-]*(?:PASSWORD|PASSWD|PWD|SECRET|API_KEY|APIKEY|TOKEN|PRIVATE_KEY|ACCESS_KEY|CLIENT_SECRET|CONNECTION_STRING)[A-Za-z0-9_.-]*)\s*=\s*([^#\r\n]+?)\s*$/gim;
+  while((m=env.exec(source)))add(map,m[2].replace(/^['"]|['"]$/g,''),'your-secret-value','Environment Secret');
+  const url=/https?:\/\/[^\s"'<>`]+/gi;
+  while((m=url.exec(source)))add(map,m[0],'https://api.example.com/v1','URL / Endpoint');
+  const path=/(?:["'])(?:[A-Za-z]:\\\\|\\\\\\\\|\/)(?:[^"'\r\n]+)(?:["'])/g;
+  while((m=path.exec(source)))add(map,m[0].slice(1,-1),'/path/to/data/file.ext','File Path');
+  Object.entries(codeNames).forEach(([a,b])=>{if(new RegExp('\\b'+reEsc(a)+'\\b','g').test(source))add(map,a,b,'Project Identifier');});
+ }else{
+  let m;
+  const uri=/\b(?:postgres|postgresql|mysql|mariadb|mongodb(?:\+srv)?):\/\/([^:\s]+):([^@\s]+)@([^\/\s]+)\/([^\s]+)/gi;
+  while((m=uri.exec(source)))add(map,m[0],'postgres://app_user:your-password@db.example.com/AppDB','Connection URI');
+  Object.entries(sqlNames).forEach(([a,b])=>{if(new RegExp('\\b'+reEsc(a)+'\\b','g').test(source))add(map,a,b,'SQL Identifier');});
+  const sqlCred=/\b(?:PASSWORD|PWD)\s*=\s*[^;\s]+/gi;
+  while((m=sqlCred.exec(source)))add(map,m[0],'PASSWORD=your-password','Database Credential');
+  const host=/\b(?:[a-z0-9-]+\.)+(?:internal|local|corp|net|com|org)(?::\d+)?\b/gi;
+  while((m=host.exec(source)))if(/internal|local|corp/i.test(m[0]))add(map,m[0],'db.example.com','Host');
+ }
+ map.sort((a,b)=>b.original.length-a.original.length);
+ map.forEach(x=>{text=text.replace(new RegExp(reEsc(x.original),'g'),x.replacement);});
+ return {text,map};
 }
-function render(){document.getElementById('app').innerHTML=`
-<div class="min-h-screen bg-slate-50">
-<header class="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-slate-200"><div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between"><a href="#top" class="flex items-center gap-2"><img src="assets/gravity-logo.png" alt="Gravity logo" class="w-11 h-11 rounded-xl object-cover shadow"><div><div class="font-extrabold text-xl leading-none">Gravity</div><div class="text-[10px] tracking-widest uppercase font-bold text-blue-600">Safe Code Paste</div></div></a><nav class="hidden md:flex gap-7 text-sm font-medium text-slate-600"><a href="#top">Home</a><a href="#sanitizer" class="text-blue-600 font-semibold">Sanitize</a><a href="#how">How It Works</a><a href="#privacy">Privacy</a></nav><a target="_blank" href="https://github.com/Skyrunner-Dev-ops/GravitySafeCodePaste" class="hidden sm:inline-flex rounded-full bg-slate-900 px-4 py-2 text-xs font-bold text-white">GitHub ↗</a></div></header>
-<main id="top">
-<section class="py-10 sm:py-16"><div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-12 gap-8 items-center"><div class="lg:col-span-7 text-center lg:text-left"><div class="inline-flex px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-700">Paste • Sanitize • Share Confidently</div><h1 class="mt-5 text-4xl sm:text-6xl font-black tracking-tight">Gravity <span class="bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500 bg-clip-text text-transparent">Safe Code Paste</span></h1><p class="mt-5 max-w-2xl text-lg text-slate-700">Sanitize AI-generated code before it enters your codebase or public chat.</p><p class="mt-3 max-w-2xl text-sm sm:text-base text-slate-500">Remove credentials, connection strings, paths, URLs and project-specific identifiers while keeping the SQL or code structure intact.</p><a href="#sanitizer" class="mt-7 inline-flex rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white">✨ Start Sanitizing</a></div><div class="lg:col-span-5"><div class="rounded-3xl bg-gradient-to-br from-blue-100 via-white to-purple-100 border border-blue-200 p-5 shadow-xl"><img src="assets/gravity-logo.png" alt="Gravity Safe Code Paste" class="w-full max-h-[380px] object-contain rounded-2xl"></div></div></div></section>
-<section id="sanitizer" class="pb-12"><div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"><div class="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden"><div class="p-4 sm:p-5 border-b bg-slate-50 flex flex-wrap gap-3 justify-between"><div class="flex bg-slate-200 p-1 rounded-xl"><button onclick="switchMode('code')" class="px-4 py-2 rounded-lg text-sm font-bold ${mode==='code'?'bg-blue-600 text-white':''}">&lt;/&gt; Code</button><button onclick="switchMode('sql')" class="px-4 py-2 rounded-lg text-sm font-bold ${mode==='sql'?'bg-blue-600 text-white':''}">🗄️ SQL</button></div><div class="flex gap-2"><button onclick="loadExample()" class="px-3 py-2 bg-white border rounded-lg text-xs font-bold">Load Example</button><button onclick="clearAll()" class="px-3 py-2 bg-white border rounded-lg text-xs font-bold">Clear</button></div></div><div class="p-4 sm:p-6 lg:p-8"><div class="grid lg:grid-cols-12 gap-6"><div class="lg:col-span-5 flex flex-col"><div class="flex justify-between mb-2"><span class="text-sm font-bold">Input ${mode==='code'?'Code':'SQL'}</span><span id="inLines" class="text-xs text-slate-500"></span></div><textarea id="input" class="min-h-[320px] rounded-xl bg-slate-950 text-slate-100 border p-4 font-mono text-sm leading-6 outline-none" spellcheck="false"></textarea></div><div class="lg:col-span-2 flex items-center justify-center"><button onclick="doSanitize()" class="w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 text-white font-black">✨ Sanitize →</button></div><div class="lg:col-span-5 flex flex-col"><div class="flex justify-between mb-2"><span class="text-sm font-bold">Sanitized ${mode==='code'?'Code':'SQL'}</span><button onclick="copyOut()" class="text-xs font-bold px-3 py-1 rounded-md bg-slate-100">Copy</button></div><textarea id="output" readonly class="min-h-[320px] rounded-xl bg-slate-950 text-emerald-300 border p-4 font-mono text-sm leading-6" placeholder="Sanitized output will appear here..."></textarea></div></div><div class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><strong>Review notice:</strong> Gravity runs locally in your browser and uses heuristic rules. Always review the sanitized output before sharing.</div>
-<div class="mt-6 grid lg:grid-cols-12 gap-6"><div class="lg:col-span-7 min-w-0 mobile-panel"><div class="flex justify-between items-center mb-3 gap-3"><h2 class="font-black shrink-0">Replacement Mapping <span id="mapCount" class="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-1">0</span></h2><div class="flex gap-2 shrink-0"><input id="search" oninput="drawMaps()" placeholder="Search..." class="w-32 sm:w-44 px-3 py-1.5 border rounded-lg text-xs"><button onclick="copyMaps()" class="text-xs font-bold px-3 py-1.5 bg-white border rounded-lg">Copy All</button></div></div><div id="maps" class="xscroll bg-white rounded-xl border border-slate-200 max-h-72"></div></div><div class="lg:col-span-5 min-w-0 mobile-panel"><div class="flex justify-between items-center mb-3"><h2 class="font-black">Detected Sensitive Items</h2><span class="text-xs text-slate-500 shrink-0">Local Inspector</span></div><div class="xscroll bg-white rounded-xl border border-slate-200 max-h-72"><div id="items" class="detected-list p-3 space-y-2"></div></div></div></div></div></div></div></section>
-<section id="how" class="bg-white border-y py-14"><div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"><h2 class="text-3xl font-black text-center">How Gravity Works</h2><div class="mt-10 grid md:grid-cols-3 gap-6">${[['01','Paste','Paste code or SQL from your AI assistant.'],['02','Sanitize','Detect secrets, paths, endpoints and project-specific identifiers.'],['03','Review & Replace','Use the mapping dictionary to understand every replacement.']].map(s=>`<div class="rounded-2xl bg-slate-50 border p-6"><div class="text-4xl font-black text-blue-600/20">${s[0]}</div><div class="mt-2 text-lg font-black">${s[1]}</div><p class="mt-2 text-sm text-slate-600">${s[2]}</p></div>`).join('')}</div></div></section><section id="privacy" class="py-14"><div class="max-w-4xl mx-auto px-4 text-center"><div class="text-5xl">🛡️</div><h2 class="mt-3 text-3xl font-black">Your code should stay yours.</h2><p class="mt-4 text-slate-600">Sanitization runs in the browser in this static MVP. Nothing is sent to a backend by Gravity.</p></div></section></main><footer class="bg-slate-950 text-white py-10"><div class="max-w-7xl mx-auto px-4 flex justify-between gap-5"><div><div class="font-black text-xl">Gravity</div><div class="text-xs text-cyan-400 font-bold uppercase tracking-widest">Safe Code Paste</div></div><a class="text-sm text-slate-300" target="_blank" href="https://github.com/Skyrunner-Dev-ops/GravitySafeCodePaste">GitHub ↗</a></div></footer></div>`;
-  const el=document.getElementById('input');el.value=input;el.addEventListener('input',()=>{input=el.value;updateLineCount()});updateLineCount();drawMaps();drawItems();
-}
-function updateLineCount(){const el=document.getElementById('inLines');if(el)el.textContent=(document.getElementById('input')?.value||'').split('\n').length+' lines'}
-function doSanitize(){input=document.getElementById('input').value;const r=sanitize(input);output=r.text;maps=r.mappings;items=r.items;document.getElementById('output').value=output;drawMaps();drawItems()}
-function switchMode(next){mode=next;input=mode==='code'?CODE_EXAMPLE:SQL_EXAMPLE;output='';maps=[];items=[];render()}
-function loadExample(){input=mode==='code'?CODE_EXAMPLE:SQL_EXAMPLE;document.getElementById('input').value=input;doSanitize()}
-function clearAll(){input='';output='';maps=[];items=[];render()}
-function copyOut(){navigator.clipboard?.writeText(document.getElementById('output').value)}
-function copyMaps(){navigator.clipboard?.writeText(maps.map(m=>`${m.original} -> ${m.replacement}`).join('\n'))}
-function drawMaps(){const q=(document.getElementById('search')?.value||'').toLowerCase();const list=maps.filter(m=>m.original.toLowerCase().includes(q)||m.replacement.toLowerCase().includes(q));document.getElementById('mapCount').textContent=maps.length;document.getElementById('maps').innerHTML=list.length?`<table class="mapping-table text-xs"><thead class="bg-slate-100"><tr><th class="text-left p-3 w-[280px]">Original</th><th class="text-left p-3 w-[300px]">Replaced With</th><th class="p-3 w-[120px]">Type</th><th class="p-3 w-[50px]"></th></tr></thead><tbody>${list.map(m=>`<tr class="border-t"><td class="p-3 font-mono text-rose-600">${esc(m.original)}</td><td class="p-3 font-mono text-emerald-700">${esc(m.replacement)}</td><td class="p-3 text-slate-500">${esc(m.category)}</td><td class="p-3"><button onclick="navigator.clipboard?.writeText('${String(m.original+' -> '+m.replacement).replace(/'/g,"\\'")}')">📋</button></td></tr>`).join('')}</tbody></table>`:`<div class="p-8 text-center text-slate-400 text-xs">No replacements yet.</div>`}
-function drawItems(){const detected=items.filter(x=>x[1]);document.getElementById('items').innerHTML=detected.length?detected.map(x=>`<div class="flex items-center justify-between gap-4 p-3 rounded-lg border bg-slate-50"><div class="flex items-start gap-2"><span>${icon[x[2]]||'•'}</span><div><div class="text-xs font-bold">${esc(x[0])}</div><div class="value text-[11px] text-slate-500 font-mono">${esc(x[1])}</div></div></div><span class="text-[11px] font-bold px-2 py-1 rounded-full bg-emerald-100 text-emerald-800">Detected</span></div>`).join(''):`<div class="p-8 text-center text-slate-400 text-xs">No sensitive items detected.</div>`}
-render();doSanitize();
+function runSanitize(){try{input=document.getElementById('input').value;const r=sanitize(input);output=r.text;document.getElementById('output').value=output;renderResults(r.map);updateStats();}catch(e){console.error(e);document.getElementById('output').value='Sanitizer error: '+e.message;}}
+function renderResults(map){document.getElementById('mappingBody').innerHTML=map.length?map.map(x=>`<tr class="border-t"><td class="p-3 font-mono">${esc(x.original)}</td><td class="p-3 font-mono text-blue-700">${esc(x.replacement)}</td><td class="p-3">${esc(x.category)}</td></tr>`).join(''):`<tr><td colspan="3" class="p-5 text-slate-400">No sensitive values detected.</td></tr>`;document.getElementById('detected').innerHTML=map.length?map.map(x=>`<div class="p-4 flex gap-3 items-center"><span class="text-lg">🛡️</span><div><b class="text-sm">${esc(x.category)}</b><div class="value font-mono text-xs text-slate-500" title="${esc(x.original)}">${esc(x.original)}</div></div></div>`).join(''):`<div class="p-5 text-slate-400 text-sm">No sensitive values detected.</div>`;}
+function updateStats(){const n=input?input.split(/\r?\n/).length:0;document.getElementById('inStats').textContent=(input.length||0)+' chars • '+n+' lines';}
+function switchMode(m){mode=m;document.getElementById('codeTab').className='px-4 py-2 rounded-lg text-sm font-bold '+(m==='code'?'bg-blue-600 text-white':'');document.getElementById('sqlTab').className='px-4 py-2 rounded-lg text-sm font-bold '+(m==='sql'?'bg-blue-600 text-white':'');document.getElementById('input').value=m==='sql'?SQL_EXAMPLE:CODE_EXAMPLE;document.getElementById('output').value='';document.getElementById('mappingBody').innerHTML='<tr><td colspan="3" class="p-5 text-slate-400">Run Sanitization to see mappings.</td></tr>';document.getElementById('detected').innerHTML='';updateStats();}
+function loadExample(){document.getElementById('input').value=mode==='sql'?SQL_EXAMPLE:CONFIG_EXAMPLE;document.getElementById('output').value='';updateStats();}
+function clearAll(){document.getElementById('input').value='';document.getElementById('output').value='';document.getElementById('mappingBody').innerHTML='<tr><td colspan="3" class="p-5 text-slate-400">Run Sanitization to see mappings.</td></tr>';document.getElementById('detected').innerHTML='';updateStats();}
+async function copyOutput(){if(!document.getElementById('output').value)return;try{await navigator.clipboard.writeText(document.getElementById('output').value);alert('Sanitized output copied.');}catch(e){document.getElementById('output').select();document.execCommand('copy');alert('Sanitized output copied.');}}
+document.getElementById('input').value=CODE_EXAMPLE;updateStats();
 </script>
 </body>
 </html>
