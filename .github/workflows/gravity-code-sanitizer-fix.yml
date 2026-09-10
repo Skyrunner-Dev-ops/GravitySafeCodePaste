@@ -12,75 +12,73 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Improve config and code detection
+      - name: Replace sanitizer engine
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
           p = Path('index.html')
           s = p.read_text(encoding='utf-8')
-          start = s.index('function sanitizeCode(source,map,found){')
-          end = s.index('\nfunction sanitizeSql(source,map,found){', start)
-
-          new_func = '''function sanitizeCode(source,map,found){
+          start = s.index('function sanitize(source){')
+          end = s.index('\nfunction render(){', start)
+          new_func = r'''function sanitize(source){
             let text=source;
-            let m;
-            const placeholder=(v)=>/^(true|false|null|undefined|sample|example|placeholder|your-|safe-|none|localhost)$/i.test(String(v).trim());
-            const addValue=(v,repl,cat)=>{ const value=String(v||'').trim(); if(value && !placeholder(value)) addMap(map,value,repl,cat); };
+            const map=new Map();
+            const found={aws:null,path:null,conn:null,secret:null,cls:[],url:null};
+            const add=(a,b,c)=>{const v=String(a||'').trim();if(v&&v!==b&&!map.has(v))map.set(v,{original:v,replacement:b,category:c})};
+            const replSecret=(key)=>/(password|passwd|pwd)/i.test(key)?'your-password':/(connectionstring|connection_string|databaseurl)/i.test(key)?'Server=your-server;Database=AppDB;User ID=app-user;Password=your-password;':'your-secret-value';
 
-            // Common API keys, cloud credentials and tokens.
-            const tokenRules=[
-              [/\\bAKIA[0-9A-Z]{16}\\b/g,'your-aws-access-key','AWS Access Key'],
-              [/\\bASIA[0-9A-Z]{16}\\b/g,'your-aws-temporary-key','AWS Access Key'],
-              [/\\b(?:sk_live_|sk_test_)[A-Za-z0-9_-]{16,}\\b/g,'your-api-key','API / Secret Key'],
-              [/\\b(?:ghp_|github_pat_)[A-Za-z0-9_-]{20,}\\b/g,'your-github-token','API / Secret Key'],
-              [/\\b(?:xox[baprs]-)[A-Za-z0-9-]{16,}\\b/g,'your-slack-token','API / Secret Key'],
-              [/\\beyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\b/g,'your-jwt-token','JWT Token']
-            ];
-            for(const [re,repl,label] of tokenRules){ while((m=re.exec(source))){ found.secrets.push(m[0]); addValue(m[0],repl,label); } }
+            if(mode==='code'){
+              // AWS / provider tokens.
+              const tokenRules=[
+                [/\bAKIA[0-9A-Z]{16}\b/g,'your-aws-access-key','AWS Access Key'],
+                [/\bASIA[0-9A-Z]{16}\b/g,'your-aws-temporary-key','AWS Access Key'],
+                [/\b(?:sk_live_|sk_test_)[A-Za-z0-9_-]{16,}\b/g,'your-api-key','API / Secret Key'],
+                [/\b(?:ghp_|github_pat_)[A-Za-z0-9_-]{20,}\b/g,'your-github-token','API / Secret Key'],
+                [/\b(?:xox[baprs]-)[A-Za-z0-9-]{16,}\b/g,'your-slack-token','API / Secret Key'],
+                [/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g,'your-jwt-token','JWT Token']
+              ];
+              let m;
+              for(const [re,r,label] of tokenRules)while((m=re.exec(source))){found.secret=m[0];add(m[0],r,label)}
 
-            // Connection strings in appsettings.json, web.config, .NET code, Java properties, etc.
-            // This catches Data Source, Server, Database, Initial Catalog, User ID and Password combinations.
-            const connection=/["']([^"']*(?:(?:Server|Data Source)\\s*=|Database\\s*=|Initial Catalog\\s*=)[^"']*(?:Password|Pwd)\\s*=[^"']*)["']/gi;
-            while((m=connection.exec(source))){
-              found.connectionParts.push(m[1]);
-              addValue(m[1],'Server=your-server;Database=AppDB;User ID=app-user;Password=your-password;Connect Timeout=30;TrustServerCertificate=true;','Connection String');
+              // appsettings.json / web.config / code connection strings, including Data Source=SERVER,1983.
+              const conn=/["']([^"']*(?:Server|Data Source)\s*=\s*[^"']*(?:Database|Initial Catalog)\s*=\s*[^"']*(?:Password|Pwd)\s*=\s*[^"']*)["']/gi;
+              while((m=conn.exec(source))){found.conn=m[1];add(m[1],'Server=your-server;Database=AppDB;User ID=app-user;Password=your-password;Connect Timeout=30;TrustServerCertificate=true;','Connection String')}
+
+              // Generic sensitive config keys across JSON, YAML, .env-style code and assignments.
+              const sensitive=/(?:["']?)([A-Za-z0-9_.-]*(?:password|passwd|pwd|secret|secretkey|secret_key|apikey|api_key|accesskey|access_key|clientsecret|client_secret|token|auth_token|privatekey|private_key|connectionstring|connection_string|sas_token)[A-Za-z0-9_.-]*)(?:["']?)\s*[:=]\s*["']([^"'\r\n]+)["']/gi;
+              while((m=sensitive.exec(source))){add(m[2],replSecret(m[1]),'Sensitive Configuration')}
+
+              // Unquoted environment variables such as DB_PASSWORD=value or API_KEY=value.
+              const env=/^\s*([A-Za-z_][A-Za-z0-9_.-]*(?:PASSWORD|PASSWD|PWD|SECRET|API_KEY|APIKEY|TOKEN|PRIVATE_KEY|ACCESS_KEY|CLIENT_SECRET|CONNECTION_STRING)[A-Za-z0-9_.-]*)\s*=\s*([^#\r\n]+?)\s*$/gim;
+              while((m=env.exec(source))){add(m[2].replace(/^['"]|['"]$/g,''),replSecret(m[1]),'Environment Secret')}
+
+              // Host / URL / endpoint configuration values.
+              const hostConfig=/(?:["']?)([A-Za-z0-9_.-]*(?:server|host|datasource|data_source|baseurl|base_url|serviceurl|service_url|endpoint|url)[A-Za-z0-9_.-]*)(?:["']?)\s*[:=]\s*["']([^"'\r\n]+)["']/gi;
+              while((m=hostConfig.exec(source))){if(/^https?:\/\//i.test(m[2]))add(m[2],'https://api.example.com/v1','URL / Endpoint');else add(m[2],'your-server','Configuration Host')}
+
+              // URLs anywhere in code/config.
+              const url=/https?:\/\/[^\s"'<>`]+/gi;
+              while((m=url.exec(source))){found.url=m[0];add(m[0],'https://api.example.com/v1','URL / Endpoint')}
+
+              // Windows, UNC and Unix paths.
+              const path=/(?:["'])(?:[A-Za-z]:\\\\|\\\\\\\\|\/)(?:[^"'\r\n]+)(?:["'])/g;
+              while((m=path.exec(source))){const raw=m[0].slice(1,-1);found.path=raw;add(raw,raw.startsWith('C:')?'C:\\\\path\\\\to\\\\file.ext':'/path/to/data/file.ext','File Path')}
+
+              Object.entries(codeIdentifierMap).forEach(([a,b])=>{if(new RegExp('\\b'+regexEscape(a)+'\\b','g').test(source))add(a,b,'Project Identifier')});
+              const cls=/\b(?:class|interface|record|struct|enum)\s+([A-Z][A-Za-z0-9_]*)\b/g;
+              while((m=cls.exec(source))){found.cls.push(m[1]);if(!map.has(m[1]))add(m[1],/Dto$/i.test(m[1])?'SafePayloadDto':/Service$/i.test(m[1])?'GenericHandlerService':/Repository$/i.test(m[1])?'GenericRepository':/Controller$/i.test(m[1])?'GenericController':'Safe'+m[1],'Declared Type')}
+            }else{
+              const uri=/\b(?:postgres|postgresql|mysql|mariadb|mongodb(?:\+srv)?):\/\/([^:\s]+):([^@\s]+)@([^\/\s]+)\/([^\s]+)/gi;let m;
+              while((m=uri.exec(source))){found.conn=m[0];add(m[0],'postgres://app_user:your-password@db.example.com/AppDB','Connection URI')}
+              Object.entries(sqlIdentifierMap).forEach(([a,b])=>{if(new RegExp('\\b'+regexEscape(a)+'\\b','g').test(source))add(a,b,'SQL Identifier')});
+              const host=/\b(?:[a-z0-9-]+\.)+(?:internal|local|corp|net|com|org)(?::\d+)?\b/gi;while((m=host.exec(source)))if(/internal|local|corp|prod/i.test(m[0]))add(m[0],'db.example.com','Host')
             }
-
-            // Generic sensitive configuration values: JSON, appsettings, YAML, XML-like attributes, .env and code assignments.
-            const sensitiveKey=/["']?([A-Za-z0-9_.-]*(?:password|passwd|pwd|secret|secretkey|secret_key|apikey|api_key|accesskey|access_key|clientsecret|client_secret|token|auth_token|privatekey|private_key|connectionstring|connection_string|sas_token)[A-Za-z0-9_.-]*)["']?\\s*[:=]\\s*["']([^"'\\r\\n]+)["']/gi;
-            while((m=sensitiveKey.exec(source))){
-              const key=m[1], value=m[2];
-              const repl=/(?:password|passwd|pwd)/i.test(key)?'your-password':/(?:connectionstring|connection_string)/i.test(key)?'Server=your-server;Database=AppDB;User ID=app-user;Password=your-password;':'your-secret-value';
-              found.secretAssignments.push(value);
-              addValue(value,repl,'Sensitive Configuration');
-            }
-
-            // Configuration URLs/endpoints, including BaseUrl/Endpoint settings and URLs embedded in code.
-            const url=/https?:\\/\\/[^\\s"'<>`]+/gi;
-            while((m=url.exec(source))){ found.urls.push(m[0]); addValue(m[0],'https://api.example.com/v1','URL / Endpoint'); }
-
-            // Windows, UNC and Unix paths in quoted config/code values.
-            const path=/(?:["'])(?:[A-Za-z]:\\\\|\\\\\\\\|\\/)(?:[^"'\\r\\n]+)(?:["'])/g;
-            while((m=path.exec(source))){
-              const raw=m[0].slice(1,-1);
-              found.paths.push(raw);
-              addValue(raw,raw.startsWith('C:')?'C:\\\\path\\\\to\\\\file.ext':'/path/to/data/file.ext','File Path');
-            }
-
-            // Project-specific identifiers and declared types.
-            Object.entries(codeIdentifierMap).forEach(([a,b])=>{
-              if(new RegExp('\\\\b'+regexEscape(a)+'\\\\b','g').test(source)) addMap(map,a,b,'Project Identifier');
-            });
-            const decl=/\\b(?:class|interface|record|struct|enum)\\s+([A-Z][A-Za-z0-9_]*)\\b/g;
-            while((m=decl.exec(source))){
-              const name=m[1]; found.types.push(name);
-              if(!map.has(name)) addMap(map,name,/Dto$/i.test(name)?'SafePayloadDto':/Service$/i.test(name)?'GenericHandlerService':/Repository$/i.test(name)?'GenericRepository':/Controller$/i.test(name)?'GenericController':'Safe'+name,'Declared Type');
-            }
-            return text;
+            [...map.keys()].sort((a,b)=>b.length-a.length).forEach(k=>{text=text.replace(new RegExp(regexEscape(k),'g'),map.get(k).replacement)});
+            return {text,mappings:[...map.values()],items:[['AWS Access Key',found.aws,'key'],['File Path',found.path,'folder'],['Connection String',found.conn,'database'],['API Key / Secret',found.secret,'key'],['Class / DTO Names',found.cls.length?[...new Set(found.cls)].join(', '):null,'code'],['Potential URL / Endpoint',found.url,'globe']]};
           }'''
-          s = s[:start] + new_func + s[end:]
-          p.write_text(s, encoding='utf-8')
+          s=s[:start]+new_func+s[end:]
+          p.write_text(s,encoding='utf-8')
           PY
       - name: Commit final change and remove temporary workflow
         shell: bash
@@ -89,5 +87,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html .github/workflows/gravity-code-sanitizer-fix.yml
-          git commit -m 'fix: support appsettings env and code sanitization [skip ci]'
+          git commit -m 'fix: sanitize appsettings env and code secrets [skip ci]'
           git push
